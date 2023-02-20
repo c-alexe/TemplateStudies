@@ -54,6 +54,8 @@ int main()
   int n_bins_y = 6;
   double x_bin_width = max_x/n_bins_x;
   double y_bin_width = 2*max_y/n_bins_y;
+  int n_nodes_x = 5;
+  int n_nodes_y = 3;
 
   // Define the xy weight 
   TF2* wxy = new TF2("w_xy", "[0]*x/TMath::Power(x*x+[1], [2])*[3]/TMath::Sqrt(2*TMath::Pi()*[4])*TMath::Exp(-0.5*(y-[5])*(y-[5])/[4])", 0.0, max_x, -max_y, max_y);
@@ -96,39 +98,40 @@ int main()
     }
   }
 
-  //std::cout<<"this is y: "<<xy_vector;
+  std::cout<<"\n"<<"this is y: "<<"\n"<<xy_vector;
 
   // Define J matrix from lambda functions
-  Eigen::MatrixXd J(n_bins_x*n_bins_y,(n_bins_x+1)*(n_bins_y+1));
+  Eigen::MatrixXd J(n_bins_x*n_bins_y, n_nodes_x*n_nodes_y);
 
   TF1* cheb_x = new TF1("cheb_x", cheb_fct, 0, max_x, 4); 
      cheb_x->SetParNames("n","offset","scale","m");
-     cheb_x->SetParameter("n", n_bins_x);
+     cheb_x->SetParameter("n", n_nodes_x-1);
      cheb_x->SetParameter("offset", 1.0);
      cheb_x->SetParameter("scale", 0.5*max_x);
 
   TF1* cheb_y = new TF1("cheb_y", cheb_fct, -max_y, max_y, 4);
      cheb_y->SetParNames("n","offset","scale","m");
-     cheb_y->SetParameter("n", n_bins_y);
+     cheb_y->SetParameter("n", n_nodes_y-1);
      cheb_y->SetParameter("offset", 0.0);
      cheb_y->SetParameter("scale", max_y);
      
   for(int h=0; h<n_bins_x*n_bins_y; h++){
-     VectorXd J_vector((n_bins_x+1)*(n_bins_y+1));
+     VectorXd J_vector(n_nodes_y*n_nodes_x);
      int q=h/n_bins_x;
      int r=h%n_bins_x;
-     for(int j=0; j<=n_bins_y; j++){
+     for(int j=0; j<n_nodes_y; j++){
         cheb_y->SetParameter("m", j);
-        for(int k=0; k<=n_bins_x; k++){
+        for(int k=0; k<n_nodes_x; k++){
            cheb_x->SetParameter("m", k);
-           J_vector(j*(n_bins_x+1)+k)=cheb_x->Integral(r*x_bin_width,(r+1)*x_bin_width,1.e-10)*cheb_y->Integral(y_bin_width*(n_bins_y-q-1),y_bin_width*(n_bins_y-q),1.e-10); 
+           //J_vector(j*n_nodes_x+k)=k; //for checking matrix multiplication indices
+	   J_vector(j*n_nodes_x+k)=cheb_x->Integral(r*x_bin_width,(r+1)*x_bin_width,1.e-10)*cheb_y->Integral(-max_y+y_bin_width*(n_bins_y-q-1),-max_y+y_bin_width*(n_bins_y-q),1.e-10); 
         }
      }
      
      J.row(h)=J_vector;
   }
 
-  //std::cout<<"this is J:"<<J;
+  std::cout<<"\n"<<"this is J:"<<"\n"<< J;
   
   // Write V^-1/2
   Eigen::MatrixXd V(n_bins_x*n_bins_y, n_bins_x*n_bins_y);
@@ -137,67 +140,67 @@ int main()
     V(i,i)=1/xy_errors(i);
   }
 
-  //std::cout << "Here is V^-1/2:"<<"\n" << V << std::endl;
+  //std::cout<<"\n"<<"Here is V^-1/2:"<<"\n"<< V;
 
   // Solve for f
   Eigen::MatrixXd A = V*J;
   Eigen::MatrixXd b = V*xy_vector;
   Eigen::VectorXd f_estim = A.bdcSvd(Eigen::ComputeThinU | Eigen::ComputeThinV).solve(b);
-
-  //std::cout << "Here is f_estim:"<<"\n" << f_estim << std::endl;
+  
+  //std::cout<<"\n"<<"Here is f_estim:"<<"\n"<< f_estim;
 
   // Unroll f
-  Eigen::MatrixXd f_unrolled(n_bins_y+1,n_bins_x+1);
-  for(int j=0; j<=n_bins_y; j++){
-    for(int k=0; k<=n_bins_x; k++){
-      f_unrolled(j,k)=f_estim(j*(n_bins_x+1)+k);
+  Eigen::MatrixXd f_unrolled(n_nodes_y,n_nodes_x);
+  for(int j=0; j<n_nodes_y; j++){
+    for(int k=0; k<n_nodes_x; k++){
+      f_unrolled(j,k)=f_estim(j*n_nodes_x+k);
     }
   }
-  std::cout << "Here is f_estim unrolled:"<<"\n" << f_unrolled << "\n";
+  std::cout <<"\n"<<"Here is f_estim unrolled:"<<"\n"<< f_unrolled;
   
   // f in terms of cheb zeros
   // Fill in histogram bin by bin
-  TH2D* hist_f_estim = new TH2D("hist_f_estim","f_estim", n_bins_x+1, 0., max_x, n_bins_y+1, -max_y, max_y);
+  TH2D* hist_f_estim = new TH2D("hist_f_estim","f_estim", n_nodes_x, 0., max_x, n_nodes_y, -max_y, max_y);
 
   TF1* cheb_zx = new TF1("cheb_zx", cheb_zeros, 0, max_x, 3);
      cheb_zx->SetParNames("n","offset","scale");
-     cheb_zx->SetParameter("n", n_bins_x);
+     cheb_zx->SetParameter("n", n_nodes_x-1);
      cheb_zx->SetParameter("offset", 1.0);
      cheb_zx->SetParameter("scale", 0.5*max_x);
 
   TF1* cheb_zy = new TF1("cheb_zy", cheb_zeros, -max_y, max_y, 3);
       cheb_zy->SetParNames("n","offset","scale");
-      cheb_zy->SetParameter("n", n_bins_y);
+      cheb_zy->SetParameter("n", n_nodes_y-1);
       cheb_zy->SetParameter("offset", 0.0);
       cheb_zy->SetParameter("scale", max_y);
 
-  Eigen::MatrixXd compare(n_bins_y+1,n_bins_x+1);
-  Eigen::MatrixXd zerosx(n_bins_y+1,n_bins_x+1);
-  Eigen::MatrixXd zerosy(n_bins_y+1,n_bins_x+1);
-  for(int j=0; j<=n_bins_y; j++){
-    for(int k=0; k<=n_bins_x; k++){
-      zerosx(n_bins_y-j,k)=cheb_zx->Eval(k);
-      zerosy(n_bins_y-j,k)=cheb_zy->Eval(j);
+  Eigen::MatrixXd compare(n_nodes_y,n_nodes_x);
+  //Eigen::MatrixXd zerosx(n_nodes_y,n_nodes_x);
+  //Eigen::MatrixXd zerosy(n_nodes_y,n_nodes_x);
+  for(int j=0; j<n_nodes_y; j++){
+    for(int k=0; k<n_nodes_x; k++){
+      //zerosx(n_nodes_y-j,k)=cheb_zx->Eval(k);
+      //zerosy(n_nodes_y-j,k)=cheb_zy->Eval(j);
       compare(j,k)=wxy->Eval(cheb_zx->Eval(k), cheb_zy->Eval(j));
       hist_f_estim->Fill(cheb_zx->Eval(k), cheb_zy->Eval(j), f_unrolled(j,k)); //not useful in this form
     }
   }
-  //std::cout<<"zerosx:"<<"\n"<<zerosx;
-  //std::cout<<"zerosy:"<<"\n"<<zerosy;
+  //std::cout<<"\n"<<"zerosx:"<<"\n"<<zerosx;
+  //std::cout<<"\n"<<"zerosy:"<<"\n"<<zerosy;
 
   double integral_estim = hist_f_estim->Integral("width");
-  //std::cout<<"integral estim with width is: "<<integral_estim<<"\n";
+  //std::cout<<"\n"<<"integral estim with width is: "<<integral_estim;
   //hist_f_estim->Scale(1/integral_estim);
 
-  std::cout<<"w_xy(zerox,zeroy):"<<"\n"<<compare<<"\n";
+  std::cout<<"\n"<<"w_xy(zerox,zeroy):"<<"\n"<<compare;
 
-  Eigen::MatrixXd ratios(n_bins_y+1,n_bins_x+1);
-  for(int j=0; j<=n_bins_y; j++){
-    for(int k=0; k<=n_bins_x; k++){
+  Eigen::MatrixXd ratios(n_nodes_y,n_nodes_x);
+  for(int j=0; j<n_nodes_y; j++){
+    for(int k=0; k<n_nodes_x; k++){
       ratios(j,k)=compare(j,k)/f_unrolled(j,k);
     }
   }
-  std::cout<<"w_xy(zerox,zeroy)/f_estim:"<<"\n"<<ratios<<"\n";
+  std::cout<<"\n"<<"w_xy(zerox,zeroy)/f_estim:"<<"\n"<<ratios;
   
   //Print the values of the "data" hist bins
 
