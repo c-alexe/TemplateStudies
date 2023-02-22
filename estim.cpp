@@ -9,6 +9,12 @@
 #include "TF2.h"
 #include "TStyle.h"
 #include "TCanvas.h"
+#include "RooFit.h"
+#include "RooRealVar.h"
+#include "RooDataSet.h"
+#include "RooDataHist.h"
+#include "RooGaussian.h"
+#include "RooPlot.h"
 #include <TMatrixD.h>
 #include <TStopwatch.h>
 #include <ROOT/RVec.hxx>
@@ -23,7 +29,8 @@ using Eigen::VectorXd;
 using namespace std;
 using namespace ROOT;
 typedef ROOT::VecOps::RVec<double> RVecD;
-using ROOT::RDF::RNode; 
+using ROOT::RDF::RNode;
+using namespace RooFit;
 
 double cheb_fct(double *var, double *par){
   double x=var[0];
@@ -50,12 +57,12 @@ int main()
   double x, y;
   double max_x = 0.8;
   double max_y = 3.5;
-  int n_bins_x = 10;
-  int n_bins_y = 6;
+  int n_bins_x = 20;
+  int n_bins_y = 10;
   double x_bin_width = max_x/n_bins_x;
   double y_bin_width = 2*max_y/n_bins_y;
-  int n_nodes_x = 5;
-  int n_nodes_y = 3;
+  int n_nodes_x =12;
+  int n_nodes_y = 6;
 
   // Define the xy weight 
   TF2* wxy = new TF2("w_xy", "[0]*x/TMath::Power(x*x+[1], [2])*[3]/TMath::Sqrt(2*TMath::Pi()*[4])*TMath::Exp(-0.5*(y-[5])*(y-[5])/[4])", 0.0, max_x, -max_y, max_y);
@@ -67,9 +74,11 @@ int main()
   wxy->SetParameter(4, sigma2_y);
   wxy->SetParameter(5, 0.0);
 
-  /*
+  double integral_wxy=wxy->Integral(0,max_x,-max_y,max_y);
+  
   //Toy weight for debugging 
   TF2* w_toy = new TF2("w_toy", "x+y", 0.0, max_x, -max_y, max_y);
+  double integral_wtoy=w_toy->Integral(0,max_x,-max_y,max_y);
   // Fill in histogram bin by bin
   TH2D* hist_toy = new TH2D("hist_toy","weights_toy", n_bins_x, 0., max_x, n_bins_y, -max_y, max_y);
   for(int i=1; i<=n_bins_x; i++){  
@@ -78,14 +87,14 @@ int main()
       hist_toy->Fill((i-0.5)*x_bin_width, -max_y + (k-0.5)*y_bin_width, weight);  
     }    
   }
-  */
+  
   
   // Fill in and normalise histogram
   TH2D* hist = new TH2D("hist","weights", n_bins_x, 0., max_x, n_bins_y, -max_y, max_y);
   hist->FillRandom("w_xy",1000000);
-  
-  double integral = hist->Integral("width");
-  std::cout<<"integral with width is: "<<integral<<"\n";
+    
+  double integral = hist->Integral();
+  std::cout<<"integral without width is: "<<integral<<"\n";
   hist->Scale(1/integral);
   
   // Roll the histogram, row major
@@ -98,7 +107,7 @@ int main()
     }
   }
 
-  std::cout<<"\n"<<"this is y: "<<"\n"<<xy_vector;
+  //std::cout<<"\n"<<"this is y: "<<"\n"<<xy_vector;
 
   // Define J matrix from lambda functions
   Eigen::MatrixXd J(n_bins_x*n_bins_y, n_nodes_x*n_nodes_y);
@@ -131,7 +140,7 @@ int main()
      J.row(h)=J_vector;
   }
 
-  std::cout<<"\n"<<"this is J:"<<"\n"<< J;
+  //std::cout<<"\n"<<"this is J:"<<"\n"<< J;
   
   // Write V^-1/2
   Eigen::MatrixXd V(n_bins_x*n_bins_y, n_bins_x*n_bins_y);
@@ -159,8 +168,6 @@ int main()
   std::cout <<"\n"<<"Here is f_estim unrolled:"<<"\n"<< f_unrolled;
   
   // f in terms of cheb zeros
-  // Fill in histogram bin by bin
-  TH2D* hist_f_estim = new TH2D("hist_f_estim","f_estim", n_nodes_x, 0., max_x, n_nodes_y, -max_y, max_y);
 
   TF1* cheb_zx = new TF1("cheb_zx", cheb_zeros, 0, max_x, 3);
      cheb_zx->SetParNames("n","offset","scale");
@@ -175,32 +182,81 @@ int main()
       cheb_zy->SetParameter("scale", max_y);
 
   Eigen::MatrixXd compare(n_nodes_y,n_nodes_x);
-  //Eigen::MatrixXd zerosx(n_nodes_y,n_nodes_x);
-  //Eigen::MatrixXd zerosy(n_nodes_y,n_nodes_x);
+  Eigen::MatrixXd zerosx(n_nodes_y,n_nodes_x);
+  Eigen::MatrixXd zerosy(n_nodes_y,n_nodes_x);
   for(int j=0; j<n_nodes_y; j++){
     for(int k=0; k<n_nodes_x; k++){
-      //zerosx(n_nodes_y-j,k)=cheb_zx->Eval(k);
-      //zerosy(n_nodes_y-j,k)=cheb_zy->Eval(j);
-      compare(j,k)=wxy->Eval(cheb_zx->Eval(k), cheb_zy->Eval(j));
-      hist_f_estim->Fill(cheb_zx->Eval(k), cheb_zy->Eval(j), f_unrolled(j,k)); //not useful in this form
+      zerosx(j,k)=cheb_zx->Eval(k);
+      zerosy(j,k)=cheb_zy->Eval(j);
+      compare(j,k)=wxy->Eval(cheb_zx->Eval(k), cheb_zy->Eval(j))/integral_wxy;
     }
   }
   //std::cout<<"\n"<<"zerosx:"<<"\n"<<zerosx;
   //std::cout<<"\n"<<"zerosy:"<<"\n"<<zerosy;
-
-  double integral_estim = hist_f_estim->Integral("width");
-  //std::cout<<"\n"<<"integral estim with width is: "<<integral_estim;
-  //hist_f_estim->Scale(1/integral_estim);
-
+  
   std::cout<<"\n"<<"w_xy(zerox,zeroy):"<<"\n"<<compare;
 
-  Eigen::MatrixXd ratios(n_nodes_y,n_nodes_x);
+  // Pulls
+  
+  Eigen::MatrixXd sigmas_inv(n_nodes_y,n_nodes_x);
+  sigmas_inv=J.transpose()*(V*V)*J;
+  
+  Eigen::MatrixXd pulls(n_nodes_y,n_nodes_x);
   for(int j=0; j<n_nodes_y; j++){
     for(int k=0; k<n_nodes_x; k++){
-      ratios(j,k)=compare(j,k)/f_unrolled(j,k);
+      pulls(j,k)=(f_unrolled(j,k)-compare(j,k))*pow(abs(sigmas_inv(j,k)),0.5);
     }
   }
-  std::cout<<"\n"<<"w_xy(zerox,zeroy)/f_estim:"<<"\n"<<ratios;
+
+  pulls = pulls(Eigen::all, Eigen::seq(1, n_nodes_x-1)); //keep all columns except first
+  std::cout<<"\n"<<"pulls:"<<"\n"<<pulls;
+  
+  TH1D* hist1_pulls = new TH1D("hist1_pulls","pulls", n_nodes_x*n_nodes_y/6, -3, 3);
+  for(int j=0; j<n_nodes_y; j++){
+    for(int k=0; k<n_nodes_x-1; k++){
+      hist1_pulls->Fill(pulls(j,k));
+    }
+  }
+  
+  TH2D* hist_pulls = new TH2D("hist_pulls","pulls", n_nodes_x, 0, n_nodes_x, n_nodes_y, 0, n_nodes_y);
+  for(int j=1; j<=n_nodes_y; j++){
+    for(int k=1; k<=n_nodes_x-1; k++){
+      hist_pulls->Fill(k-0.1, n_nodes_y-j+1-0.1, pulls(j-1,k-1));
+    }
+  }
+
+  // Fit pulls
+  // Build Gaussian PDF
+  RooRealVar x_pull("x_pull", "x_pull", -3, 3);
+  RooRealVar mean("mean", "mean of gaussian", 0, -3, 3);
+  RooRealVar sigma("sigma", "width of gaussian", 1, 0.0001, 5);
+ 
+  RooGaussian gauss("gauss", "gaussian PDF", x_pull, mean, sigma);
+
+  RooDataHist dh("dh", "dh", x_pull, Import(*hist1_pulls));
+
+  RooPlot *frame = x_pull.frame(Title("Pulls"));
+  dh.plotOn(frame);
+  gauss.fitTo(dh);
+  gauss.plotOn(frame);
+
+  
+  
+  //
+  Eigen::MatrixXd diff(n_nodes_y,n_nodes_x);
+  for(int j=0; j<n_nodes_y; j++){
+    for(int k=0; k<n_nodes_x; k++){
+      diff(j,k)=f_unrolled(j,k)-compare(j,k);
+    }
+  }
+  std::cout<<"\n"<<"f-w:"<<"\n"<<diff;
+
+  TH2D* hist_diff = new TH2D("hist_diff","f-w", n_nodes_x, 0, n_nodes_x, n_nodes_y, 0, n_nodes_y);
+  for(int j=1; j<=n_nodes_y; j++){
+    for(int k=1; k<=n_nodes_x; k++){
+      hist_diff->Fill(k-0.1, n_nodes_y-j+1-0.1, diff(j-1,k-1));
+    }
+  }
   
   //Print the values of the "data" hist bins
 
@@ -227,11 +283,26 @@ int main()
   c1->cd();
   //gStyle->SetPalette(87);
   gStyle->SetNumberContours(256);
+  hist->SetStats(0);
   hist->Draw("COLZ");
   c1->SaveAs("hist.pdf");
-  hist_f_estim->SetStats(0);
-  hist_f_estim->Draw("COLZ");
-  c1->SaveAs("hist_f_estim.pdf");
+
+  hist1_pulls->SetStats(0);
+  hist1_pulls->Draw("HIST");
+  c1->SaveAs("hist1_pulls.pdf");
+  
+  hist_pulls->SetStats(0);
+  hist_pulls->Draw("COLZ");
+  c1->SaveAs("hist_pulls.pdf");
+
+  frame->Draw();
+  c1->SaveAs("fit.pdf");
+  
+  hist_diff->SetStats(0);
+  hist_diff->Draw("COLZ");
+  c1->SaveAs("hist_diff.pdf");
+
+  err->SetStats(0);
   err->Draw("HIST");
   c1->SaveAs("err.pdf");
 }
