@@ -198,27 +198,28 @@ int main()
 
   // Pulls
   
-  Eigen::MatrixXd sigmas_inv(n_nodes_y,n_nodes_x);
-  sigmas_inv=J.transpose()*(V*V)*J;
+  Eigen::MatrixXd sigmas(n_nodes_y,n_nodes_x);
+  sigmas=(J.transpose()*(V*V)*J).inverse();
+  
   
   Eigen::MatrixXd pulls(n_nodes_y,n_nodes_x);
   for(int j=0; j<n_nodes_y; j++){
     for(int k=0; k<n_nodes_x; k++){
-      pulls(j,k)=(f_unrolled(j,k)-compare(j,k))*pow(abs(sigmas_inv(j,k)),0.5);
+      pulls(j,k)=(f_unrolled(j,k)-compare(j,k))/pow(abs(sigmas(j,k)),0.5);
     }
   }
 
   pulls = pulls(Eigen::all, Eigen::seq(1, n_nodes_x-1)); //keep all columns except first
   std::cout<<"\n"<<"pulls:"<<"\n"<<pulls;
   
-  TH1D* hist1_pulls = new TH1D("hist1_pulls","pulls", n_nodes_x*n_nodes_y/6, -3, 3);
+  TH1D* hist1_pulls = new TH1D("hist1_pulls","pulls", n_nodes_x*n_nodes_y/5, -3.5, 3.5);
   for(int j=0; j<n_nodes_y; j++){
     for(int k=0; k<n_nodes_x-1; k++){
       hist1_pulls->Fill(pulls(j,k));
     }
   }
   
-  TH2D* hist_pulls = new TH2D("hist_pulls","pulls", n_nodes_x, 0, n_nodes_x, n_nodes_y, 0, n_nodes_y);
+  TH2D* hist_pulls = new TH2D("hist_pulls","pulls", n_nodes_x-1, 0, n_nodes_x-1, n_nodes_y, 0, n_nodes_y);
   for(int j=1; j<=n_nodes_y; j++){
     for(int k=1; k<=n_nodes_x-1; k++){
       hist_pulls->Fill(k-0.1, n_nodes_y-j+1-0.1, pulls(j-1,k-1));
