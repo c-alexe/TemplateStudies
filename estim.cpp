@@ -61,8 +61,8 @@ int main()
   int n_bins_y = 10;
   double x_bin_width = max_x/n_bins_x;
   double y_bin_width = 2*max_y/n_bins_y;
-  int n_nodes_x =12;
-  int n_nodes_y = 6;
+  int n_nodes_x = 16;
+  int n_nodes_y = 8;
 
   // Define the xy weight 
   TF2* wxy = new TF2("w_xy", "[0]*x/TMath::Power(x*x+[1], [2])*[3]/TMath::Sqrt(2*TMath::Pi()*[4])*TMath::Exp(-0.5*(y-[5])*(y-[5])/[4])", 0.0, max_x, -max_y, max_y);
@@ -143,17 +143,17 @@ int main()
   //std::cout<<"\n"<<"this is J:"<<"\n"<< J;
   
   // Write V^-1/2
-  Eigen::MatrixXd V(n_bins_x*n_bins_y, n_bins_x*n_bins_y);
-  V=MatrixXd::Zero(n_bins_x*n_bins_y, n_bins_x*n_bins_y);
+  Eigen::MatrixXd V_inv_sqrt(n_bins_x*n_bins_y, n_bins_x*n_bins_y);
+  V_inv_sqrt=MatrixXd::Zero(n_bins_x*n_bins_y, n_bins_x*n_bins_y);
   for(int i=0; i<n_bins_x*n_bins_y; i++){
-    V(i,i)=1/xy_errors(i);
+    V_inv_sqrt(i,i)=1/xy_errors(i);
   }
 
-  //std::cout<<"\n"<<"Here is V^-1/2:"<<"\n"<< V;
+  //std::cout<<"\n"<<"Here is V^-1/2:"<<"\n"<< V_inv_sqrt;
 
   // Solve for f
-  Eigen::MatrixXd A = V*J;
-  Eigen::MatrixXd b = V*xy_vector;
+  Eigen::MatrixXd A = V_inv_sqrt*J;
+  Eigen::MatrixXd b = V_inv_sqrt*xy_vector;
   Eigen::VectorXd f_estim = A.bdcSvd(Eigen::ComputeThinU | Eigen::ComputeThinV).solve(b);
   
   //std::cout<<"\n"<<"Here is f_estim:"<<"\n"<< f_estim;
@@ -165,7 +165,7 @@ int main()
       f_unrolled(j,k)=f_estim(j*n_nodes_x+k);
     }
   }
-  std::cout <<"\n"<<"Here is f_estim unrolled:"<<"\n"<< f_unrolled;
+  //std::cout <<"\n"<<"Here is f_estim unrolled:"<<"\n"<< f_unrolled;
   
   // f in terms of cheb zeros
 
@@ -194,25 +194,26 @@ int main()
   //std::cout<<"\n"<<"zerosx:"<<"\n"<<zerosx;
   //std::cout<<"\n"<<"zerosy:"<<"\n"<<zerosy;
   
-  std::cout<<"\n"<<"w_xy(zerox,zeroy):"<<"\n"<<compare;
+  // std::cout<<"\n"<<"w_xy(zerox,zeroy):"<<"\n"<<compare;
 
   // Pulls
   
-  Eigen::MatrixXd sigmas(n_nodes_y,n_nodes_x);
-  sigmas=(J.transpose()*(V*V)*J).inverse();
-  
+  Eigen::MatrixXd sigmas(n_nodes_y*n_nodes_x, n_nodes_y*n_nodes_x);
+  //sigmas=(J.transpose()*(V_inv_sqrt*V_inv_sqrt)*J).inverse();
+  sigmas=(J.transpose()*(V_inv_sqrt*V_inv_sqrt)*J).completeOrthogonalDecomposition().solve(MatrixXd::Identity( n_nodes_y*n_nodes_x, n_nodes_y*n_nodes_x)); // .inverse() not recommended for large matrices
   
   Eigen::MatrixXd pulls(n_nodes_y,n_nodes_x);
   for(int j=0; j<n_nodes_y; j++){
     for(int k=0; k<n_nodes_x; k++){
-      pulls(j,k)=(f_unrolled(j,k)-compare(j,k))/pow(abs(sigmas(j,k)),0.5);
+      pulls(j,k)=(f_unrolled(j,k)-compare(j,k))/pow(abs(sigmas(j*n_nodes_x+k, j*n_nodes_x+k)),0.5);
+      //std::cout<<"\n"<<"(j,k): ("<<j<<","<<k<<") and sigmas of: "<<j*n_nodes_x+k;
     }
   }
 
   pulls = pulls(Eigen::all, Eigen::seq(1, n_nodes_x-1)); //keep all columns except first
-  std::cout<<"\n"<<"pulls:"<<"\n"<<pulls;
+  // std::cout<<"\n"<<"pulls:"<<"\n"<<pulls;
   
-  TH1D* hist1_pulls = new TH1D("hist1_pulls","pulls", n_nodes_x*n_nodes_y/5, -3.5, 3.5);
+  TH1D* hist1_pulls = new TH1D("hist1_pulls","pulls", n_nodes_x*n_nodes_y/8, -3.5, 3.5);
   for(int j=0; j<n_nodes_y; j++){
     for(int k=0; k<n_nodes_x-1; k++){
       hist1_pulls->Fill(pulls(j,k));
@@ -228,7 +229,7 @@ int main()
 
   // Fit pulls
   // Build Gaussian PDF
-  RooRealVar x_pull("x_pull", "x_pull", -3, 3);
+  RooRealVar x_pull("x_pull", "x_pull", -3.5, 3.5);
   RooRealVar mean("mean", "mean of gaussian", 0, -3, 3);
   RooRealVar sigma("sigma", "width of gaussian", 1, 0.0001, 5);
  
@@ -250,7 +251,7 @@ int main()
       diff(j,k)=f_unrolled(j,k)-compare(j,k);
     }
   }
-  std::cout<<"\n"<<"f-w:"<<"\n"<<diff;
+  //std::cout<<"\n"<<"f-w:"<<"\n"<<diff;
 
   TH2D* hist_diff = new TH2D("hist_diff","f-w", n_nodes_x, 0, n_nodes_x, n_nodes_y, 0, n_nodes_y);
   for(int j=1; j<=n_nodes_y; j++){
