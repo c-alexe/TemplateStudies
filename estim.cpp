@@ -63,7 +63,7 @@ int main()
   double y_bin_width = 2*max_y/n_bins_y;
   int n_nodes_x = 16;
   int n_nodes_y = 8;
-
+  
   // Define the xy weight 
   TF2* wxy = new TF2("w_xy", "[0]*x/TMath::Power(x*x+[1], [2])*[3]/TMath::Sqrt(2*TMath::Pi()*[4])*TMath::Exp(-0.5*(y-[5])*(y-[5])/[4])", 0.0, max_x, -max_y, max_y);
   double sigma2_y = 4.0*4.0;
@@ -87,8 +87,7 @@ int main()
       hist_toy->Fill((i-0.5)*x_bin_width, -max_y + (k-0.5)*y_bin_width, weight);  
     }    
   }
-  
-  
+  /*
   // Fill in and normalise histogram
   TH2D* hist = new TH2D("hist","weights", n_bins_x, 0., max_x, n_bins_y, -max_y, max_y);
   hist->FillRandom("w_xy",1000000);
@@ -96,7 +95,29 @@ int main()
   double integral = hist->Integral();
   std::cout<<"integral without width is: "<<integral<<"\n";
   hist->Scale(1/integral);
+  */
   
+  // Get original histo
+  TFile *f = new TFile("all_fileqt_rbiny10.root");
+  f->ls();
+  TH2D* hist_orig = new TH2D("hist","weights", 10, 0, 10, 10, 0, 10);
+  hist_orig = (TH2D*)f->Get("ang_coeff_z_y_vs_qt_A_4");
+
+  //Rotate original histo
+  double max_x_new = 5;
+  double max_y_new = 100;
+  int n_bins_x_new = hist_orig->GetNbinsX();
+  int n_bins_y_new = hist_orig->GetNbinsY();
+  double y_bin_width_new = max_y_new/n_bins_y_new; 
+  double x_bin_width_new = 2*max_x_new/n_bins_x_new;
+  
+  TH2D* hist = new TH2D("hist","weights", n_bins_y_new, 0., max_y_new, n_bins_x_new, -max_x_new, max_x_new);
+  for(int i=1; i<=n_bins_y_new; i++){
+    for(int k=1; k<=n_bins_x_new; k++){
+      hist->Fill((i-0.5)*y_bin_width_new, -max_x_new + (k-0.5)*x_bin_width_new, hist_orig->GetBinContent(k,i));
+    }
+  }
+    
   // Roll the histogram, row major
   VectorXd xy_vector(n_bins_x*n_bins_y);
   VectorXd xy_errors(n_bins_x*n_bins_y);
@@ -198,15 +219,15 @@ int main()
 
   // Pulls
   
-  Eigen::MatrixXd sigmas(n_nodes_y*n_nodes_x, n_nodes_y*n_nodes_x);
+  Eigen::MatrixXd covariance_nodes(n_nodes_y*n_nodes_x, n_nodes_y*n_nodes_x);
   //sigmas=(J.transpose()*(V_inv_sqrt*V_inv_sqrt)*J).inverse();
-  sigmas=(J.transpose()*(V_inv_sqrt*V_inv_sqrt)*J).completeOrthogonalDecomposition().solve(MatrixXd::Identity( n_nodes_y*n_nodes_x, n_nodes_y*n_nodes_x)); // .inverse() not recommended for large matrices
+  covariance_nodes=(J.transpose()*(V_inv_sqrt*V_inv_sqrt)*J).completeOrthogonalDecomposition().solve(MatrixXd::Identity( n_nodes_y*n_nodes_x, n_nodes_y*n_nodes_x)); // .inverse() not recommended for large matrices
   
   Eigen::MatrixXd pulls(n_nodes_y,n_nodes_x);
   for(int j=0; j<n_nodes_y; j++){
     for(int k=0; k<n_nodes_x; k++){
-      pulls(j,k)=(f_unrolled(j,k)-compare(j,k))/pow(abs(sigmas(j*n_nodes_x+k, j*n_nodes_x+k)),0.5);
-      //std::cout<<"\n"<<"(j,k): ("<<j<<","<<k<<") and sigmas of: "<<j*n_nodes_x+k;
+      pulls(j,k)=(f_unrolled(j,k)-compare(j,k))/pow(abs(covariance_nodes(j*n_nodes_x+k, j*n_nodes_x+k)),0.5);
+      //std::cout<<"\n"<<"(j,k): ("<<j<<","<<k<<") and covariance_nodes of: "<<j*n_nodes_x+k;
     }
   }
 
@@ -242,7 +263,13 @@ int main()
   gauss.fitTo(dh);
   gauss.plotOn(frame);
 
-  
+  // Correlation
+  TH2D* corr = new TH2D("corr","Correlation matrix nb_x=20, nb_y=10, nn_x=16, nn_y=8", n_nodes_x*n_nodes_y, 0, n_nodes_x*n_nodes_y, n_nodes_x*n_nodes_y, 0, n_nodes_x*n_nodes_y);
+  for(int j=1; j<=n_nodes_x*n_nodes_y; j++){
+    for(int k=1; k<=n_nodes_x*n_nodes_y; k++){ 
+      corr->Fill(k-0.01, j-0.01, covariance_nodes(j-1,k-1)/pow(abs(covariance_nodes(j-1, j-1)),0.5)/pow(abs(covariance_nodes(k-1, k-1)),0.5));
+    }
+  }
   
   //
   Eigen::MatrixXd diff(n_nodes_y,n_nodes_x);
@@ -289,6 +316,10 @@ int main()
   hist->Draw("COLZ");
   c1->SaveAs("hist.pdf");
 
+  hist_orig->SetStats(0);
+  hist_orig->Draw("COLZ");
+  c1->SaveAs("hist_orig.pdf");
+
   hist1_pulls->SetStats(0);
   hist1_pulls->Draw("HIST");
   c1->SaveAs("hist1_pulls.pdf");
@@ -296,6 +327,10 @@ int main()
   hist_pulls->SetStats(0);
   hist_pulls->Draw("COLZ");
   c1->SaveAs("hist_pulls.pdf");
+
+  corr->SetStats(0);
+  corr->Draw("COLZ");
+  c1->SaveAs("corr.pdf");
 
   frame->Draw();
   c1->SaveAs("fit.pdf");

@@ -11,7 +11,7 @@ double nonrelativistic(double *q, double *par)
 {
   double Q = q[0];
   return 1./TMath::Pi()/(1 + (Q-par[0])*(Q-par[0])/(par[1]*par[1]/4));
-  //return par[1]/2/TMath::Pi()/((Q-par[0])*(Q-par[0]) + par[1]*par[1]/4); //formula from note
+  //return par[1]/2/TMath::Pi()/((Q-par[0])*(Q-par[0]) + par[1]*par[1]/4); //formula to use when G!=2
 }
 
 double findratio(double *q, double *par)
@@ -21,7 +21,7 @@ double findratio(double *q, double *par)
   double k = 2*TMath::Sqrt2()*par[0]*par[1]*gamma/TMath::Pi()/TMath::Sqrt(par[0]*par[0]+gamma);
   double d = (Q*Q-par[0]*par[0])*(Q*Q-par[0]*par[0]) + par[0]*par[0]*par[1]*par[1]; //relativistic is k/d 
   double n = 1./TMath::Pi()/(1 + (Q-par[0])*(Q-par[0])/(par[1]*par[1]/4)); //non-relativistic
-  //double n = par[1]/2/TMath::Pi()/((Q-par[0])*(Q-par[0]) + par[1]*par[1]/4); //formula from note
+  //double n = par[1]/2/TMath::Pi()/((Q-par[0])*(Q-par[0]) + par[1]*par[1]/4); //formula to use when G!=2
   return k/d/n/10000; //by 10000 to plot together with the BW
 }
 
