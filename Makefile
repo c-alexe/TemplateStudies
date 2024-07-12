@@ -6,54 +6,12 @@ CXXFLAGS=`root-config --libs --cflags` -lMinuit2 -O3 -I/usr/include/boost/ -L/us
 SRCDIR=.
 BINDIR=.
 
-OBJ=main.cpp
-
 .PHONY: all
 all:
 	$(info, "--- Full compilation --- ")	
 	$(info, "-> if you want just to recompile something use 'make fast' ")	
 	$(info, "------------------------ ")	
-	$(MAKE) main.o
-
-.PHONY: fast
-fast:
-	$(MAKE) main.o
-
-main.o: main.cpp
-	$(GCC) $(CXXFLAGS) -o $(BINDIR)/main $(OBJ)
-
-jac.o: jac.cpp
-	$(GCC) $(CXXFLAGS) -o $(BINDIR)/jac jac.cpp  
-
-jac2: jac2.cpp
-	$(GCC) $(CXXFLAGS) -o $(BINDIR)/jac2 jac2.cpp  
-
-jac3: jac3.cpp
-	$(GCC) $(CXXFLAGS) -o $(BINDIR)/jac3 jac3.cpp  
-
-jac4: jac4.cpp
-	$(GCC) $(CXXFLAGS) -o $(BINDIR)/jac4 jac4.cpp  
-
-fit: fit.cpp
-	$(GCC) $(CXXFLAGS) -o $(BINDIR)/fit fit.cpp  
-
-fit_grid: fit_grid.cpp
-	$(GCC) $(CXXFLAGS) -o $(BINDIR)/fit_grid fit_grid.cpp  
-
-debug.o: debug.cpp
-	$(GCC) $(CXXFLAGS) -o $(BINDIR)/debug debug.cpp  
-
-estim: estim.cpp
-	$(GCC) $(CXXFLAGS) -o $(BINDIR)/estim estim.cpp
-
-jac2tmp: jac2.cpp
-	$(GCC) $(CXXFLAGS) -o $(BINDIR)/jac2tmp jac2.cpp  
-
-getparam: getparam.cpp
-	$(GCC) $(CXXFLAGS) -o $(BINDIR)/getparam getparam.cpp  
-
-toy: toy.cpp
-	$(GCC) $(CXXFLAGS) -o $(BINDIR)/toy toy.cpp  
+	$(MAKE) massfit resolfit massscales massscales_data 
 
 massfit: massfit.cpp
 	$(GCC) $(CXXFLAGS) -o $(BINDIR)/massfit massfit.cpp  
